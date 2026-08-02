@@ -22,10 +22,11 @@ jobs:
           SHOPIFY_CLIENT_ID: ${{ secrets.SHOPIFY_CLIENT_ID }}
           SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
         run: python build_awin_feed.py
-      - name: Commit the updated feed
+      - name: Write heartbeat and commit
         run: |
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > last_built.txt
           git config user.name "github-actions"
           git config user.email "actions@users.noreply.github.com"
-          git add awin_feed.csv
-          git diff --cached --quiet || git commit -m "awin feed $(date -u +%F_%H:%M)"
+          git add awin_feed.csv last_built.txt
+          git commit -m "awin feed $(date -u +%F_%H:%M)"
           git push
