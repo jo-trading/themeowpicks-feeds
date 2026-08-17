@@ -9,6 +9,7 @@ Writes awin_feed.csv, which the workflow commits so AWIN can fetch the raw URL.
 Same rules as the store's build: one row per variant; EXCLUDE accessories/spares (tag `hidden`,
 or replacement/refill/spare/insert titles) and off-site affiliate products (tag `affiliate`/
 `partner`); NO cost price; availability from availableForSale so continue-policy items read in stock.
+product_id is kept unique: if two variants share a SKU, the later one gets the variant id appended.
 """
 import csv, html, os, re, sys, time, json
 import urllib.request
@@ -82,7 +83,7 @@ def excluded(n):
 def main():
     store = norm_store(os.environ["SHOPIFY_STORE"])
     token = access_token(store, os.environ["SHOPIFY_CLIENT_ID"], os.environ["SHOPIFY_CLIENT_SECRET"])
-    rows, cursor = [], None
+    rows, seen, cursor = [], set(), None
     while True:
         d = gql(store, token, Q, {"c": cursor}) or {}
         conn = (d.get("data") or {}).get("products") or {}
@@ -95,11 +96,15 @@ def main():
             base = n.get("onlineStoreUrl") or f"{DOMAIN}/products/{n['handle']}"
             for ve in (n.get("variants") or {}).get("edges", []):
                 v = ve["node"]; vid = (v.get("id") or "").rsplit("/", 1)[-1]
+                pid = v.get("sku") or vid
+                if pid in seen:            # duplicate SKU across variants/products -> keep row unique
+                    pid = f"{pid}-{vid}"
+                seen.add(pid)
                 o = {x["name"].lower(): x["value"] for x in v.get("selectedOptions", [])}
                 extra = " / ".join(x["value"] for x in v.get("selectedOptions", []) if x["value"] != "Default Title")
                 img = ((v.get("image") or {}).get("url")) or ((n.get("featuredImage") or {}).get("url")) or ""
                 rows.append({
-                    "product_id": v.get("sku") or vid,
+                    "product_id": pid,
                     "product_name": n["title"] + (f" - {extra}" if extra else ""),
                     "description": desc, "product_url": f"{base}?variant={vid}", "image_url": img,
                     "price": v.get("price", ""), "currency": CURRENCY, "brand": n.get("vendor", ""),
