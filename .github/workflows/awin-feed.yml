@@ -28,5 +28,14 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@users.noreply.github.com"
           git add awin_feed.csv last_built.txt
-          git commit -m "awin feed $(date -u +%F_%H:%M)"
-          git push
+          git commit -m "awin feed $(date -u +%F_%H:%M)" || { echo "nothing to commit"; exit 0; }
+          # Push with rebase + retry so a transient remote rejection
+          # (e.g. "fatal error in commit_refs") or a race does not fail the run.
+          for i in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              echo "pushed on attempt $i"; exit 0
+            fi
+            echo "push attempt $i failed; retrying in $((i*10))s"
+            sleep $((i*10))
+          done
+          echo "push failed after 5 attempts"; exit 1
